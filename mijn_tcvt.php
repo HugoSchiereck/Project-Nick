@@ -91,36 +91,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 </head>
 <body>
 
-  <aside class="sidebar">
-    <div class="sidebar-logo-wrap">
-      <img src="https://mstlogistics.nl/assets/images/logo/logo.svg" alt="MST Logistics">
-    </div>
-
-    <div class="nav-section">
-      <span class="nav-label">Mijn Portaal</span>
-      <a href="dashboard.php" class="nav-item">Dashboard</a>
-      <a href="mijn_verlof.php" class="nav-item">Mijn verlofaanvragen</a>
-      <a href="mijn_code95.php" class="nav-item">Mijn Code 95</a>
-      <a href="mijn_tcvt.php" class="nav-item active">Mijn TCVT</a>
-    </div>
-
-    <?php if($currentUser['role'] === 'admin' || $currentUser['role'] === 'manager'): ?>
-    <div class="nav-section" style="margin-top:20px;">
-      <span class="nav-label">Beheerders Menu</span>
-      <a href="tcvt.php" class="nav-item">← Terug naar beheer</a>
-    </div>
-    <?php endif; ?>
-
-    <div class="sidebar-bottom">
-      <a href="logout.php" class="user-chip">
-        <div class="avatar"><?= htmlspecialchars(substr($currentUser['first_name'], 0, 1)) ?></div>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:500;"><?= htmlspecialchars($currentUser['first_name'] . ' ' . $currentUser['last_name']) ?></div>
-          <div style="font-size:11px;color:var(--text3);"><?= htmlspecialchars(ucfirst($currentUser['role'])) ?></div>
-        </div>
-      </a>
-    </div>
-  </aside>
+  <?php include 'sidebar.php'; ?>
 
   <main class="main">
     <div class="page-header">

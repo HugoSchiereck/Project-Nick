@@ -152,45 +152,7 @@ tr:hover td{background:#FAFAF8;}
 </head>
 <body>
 
-  <aside class="sidebar">
-    <div class="sidebar-logo-wrap">
-      <img src="https://mstlogistics.nl/assets/images/logo/logo.svg" alt="MST Logistics">
-    </div>
-
-    <div class="nav-section">
-      <span class="nav-label">Overzicht</span>
-      <a href="dashboard.php" class="nav-item">Dashboard</a>
-    </div>
-
-    <div class="nav-section">
-      <span class="nav-label">HR & Verlof</span>
-      <a href="medewerkers.php" class="nav-item">Medewerkers</a>
-      <a href="verlof_beheer.php" class="nav-item">Verlofaanvragen</a>
-    </div>
-
-    <div class="nav-section">
-      <span class="nav-label">Certificering</span>
-      <a href="code95.php" class="nav-item">Code 95</a>
-      <a href="cursussen.php" class="nav-item">Cursussen</a>
-      <a href="tcvt.php" class="nav-item">TCVT</a>
-      <a href="opleidingen.php" class="nav-item">Opleidingen</a>
-    </div>
-
-    <div class="nav-section" style="margin-top:20px;">
-      <span class="nav-label">Beheer</span>
-      <a href="onboarding.php" class="nav-item active">Onboarding</a>
-    </div>
-
-    <div class="sidebar-bottom">
-      <a href="logout.php" class="user-chip">
-        <div class="avatar"><?= htmlspecialchars(substr($currentUser['first_name'], 0, 1)) ?></div>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:500;"><?= htmlspecialchars($currentUser['first_name'] . ' ' . $currentUser['last_name']) ?></div>
-          <div style="font-size:11px;color:var(--text3);"><?= htmlspecialchars(ucfirst($currentUser['role'])) ?></div>
-        </div>
-      </a>
-    </div>
-  </aside>
+  <?php include 'sidebar.php'; ?>
 
   <main class="main">
     <div class="page-header">
