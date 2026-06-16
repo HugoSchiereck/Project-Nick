@@ -41,12 +41,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $stmt = $pdo->prepare("INSERT INTO education_types (name, description, valid_years, category) VALUES (?, ?, ?, ?)");
                 $stmt->execute([$name, $description, $valid_years, $category]);
                 $_SESSION['success_msg'] = "Opleidingstype succesvol aangemaakt!";
+                $logAction = 'Opleiding aangemaakt';
             } else {
                 // Bestaand type updaten
                 $stmt = $pdo->prepare("UPDATE education_types SET name = ?, description = ?, valid_years = ?, category = ? WHERE id = ?");
                 $stmt->execute([$name, $description, $valid_years, $category, $type_id]);
                 $_SESSION['success_msg'] = "Opleidingstype succesvol bijgewerkt!";
+                $logAction = 'Opleiding bewerkt';
             }
+
+            // -- AUDIT LOG --
+            $logDetail = htmlspecialchars("$name (Categorie: $category)");
+            $pdo->exec("INSERT INTO audit_log (user_id, category, action, detail) VALUES ({$_SESSION['user_id']}, 'opleiding', '$logAction', '$logDetail')");
         }
         header("Location: opleidingen.php");
         exit;
@@ -71,7 +77,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $stmt->execute([$uid, $type_id, $date_achieved, $expiry_date, $cert_number, $note]);
                 }
                 $pdo->commit();
-                $_SESSION['success_msg'] = "Opleiding succesvol toegewezen aan " . count($participants) . " medewerker(s)!";
+                
+                // -- AUDIT LOG --
+                $typeInfo = $pdo->query("SELECT name FROM education_types WHERE id = " . (int)$type_id)->fetch();
+                $typeName = $typeInfo ? $typeInfo['name'] : 'Onbekende opleiding';
+                $aantal = count($participants);
+                $logDetail = htmlspecialchars("$typeName toegewezen aan $aantal medewerker(s)");
+                $pdo->exec("INSERT INTO audit_log (user_id, category, action, detail) VALUES ({$_SESSION['user_id']}, 'opleiding', 'Opleiding toegewezen', '$logDetail')");
+                
+                $_SESSION['success_msg'] = "Opleiding succesvol toegewezen aan " . $aantal . " medewerker(s)!";
             } catch (PDOException $e) {
                 $pdo->rollBack();
                 $_SESSION['error_msg'] = "Fout bij opslaan: " . $e->getMessage();
@@ -84,9 +98,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     // 3. Behaalde opleiding verwijderen
     if ($_POST['action'] === 'delete_education') {
         $edu_id = $_POST['education_id'];
+        
+        // -- AUDIT LOG (Eerst ophalen voordat we hem verwijderen) --
+        $eduInfo = $pdo->query("SELECT et.name, u.first_name, u.last_name FROM user_educations ue JOIN education_types et ON ue.type_id = et.id JOIN users u ON ue.user_id = u.id WHERE ue.id = " . (int)$edu_id)->fetch();
+        if ($eduInfo) {
+            $logDetail = htmlspecialchars("{$eduInfo['name']} ingetrokken bij {$eduInfo['first_name']} {$eduInfo['last_name']}");
+            $pdo->exec("INSERT INTO audit_log (user_id, category, action, detail) VALUES ({$_SESSION['user_id']}, 'opleiding', 'Opleiding ingetrokken', '$logDetail')");
+        }
+        // -----------------------------------------------------------
+
         $stmt = $pdo->prepare("DELETE FROM user_educations WHERE id = ?");
         $stmt->execute([$edu_id]);
-        $_SESSION['success_msg'] = "Behaalde opleiding verwijderd.";
+        
+        $_SESSION['success_msg'] = "Behaalde opleiding succesvol ingetrokken.";
         header("Location: opleidingen.php");
         exit;
     }
