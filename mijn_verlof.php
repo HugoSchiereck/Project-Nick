@@ -15,8 +15,18 @@ $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
 $stmt->execute([$user_id]);
 $currentUser = $stmt->fetch();
 
+// --- BERICHTEN OPVANGEN UIT SESSIE ---
 $success_msg = '';
 $error_msg = '';
+
+if (isset($_SESSION['success_msg'])) {
+    $success_msg = $_SESSION['success_msg'];
+    unset($_SESSION['success_msg']); // Verwijder direct nadat we hem hebben gelezen
+}
+if (isset($_SESSION['error_msg'])) {
+    $error_msg = $_SESSION['error_msg'];
+    unset($_SESSION['error_msg']);
+}
 
 // --- FORMULIER VERWERKEN (Nieuwe aanvraag) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'new_request') {
@@ -30,27 +40,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $time_to = !empty($_POST['time_to']) ? $_POST['time_to'] : null;
 
     if (empty($type) || empty($from_date) || empty($to_date)) {
-        $error_msg = "Vul alle verplichte velden in (Type, Van en Tot).";
+        $_SESSION['error_msg'] = "Vul alle verplichte velden in (Type, Van en Tot).";
     } elseif ($to_date < $from_date) {
-        $error_msg = "De einddatum kan niet voor de begindatum liggen.";
+        $_SESSION['error_msg'] = "De einddatum kan niet voor de begindatum liggen.";
     } else {
         try {
             $stmt = $pdo->prepare("INSERT INTO requests (user_id, type, from_date, to_date, time_from, time_to, reason, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')");
             $stmt->execute([$user_id, $type, $from_date, $to_date, $time_from, $time_to, $reason]);
-            $success_msg = "Je verlofaanvraag is succesvol ingediend!";
+            
+            $_SESSION['success_msg'] = "Je verlofaanvraag is succesvol ingediend!";
+            // Redirect om formulier-resubmission te voorkomen!
+            header("Location: mijn_verlof.php");
+            exit;
+            
         } catch (PDOException $e) {
-            $error_msg = "Er ging iets mis bij het opslaan: " . $e->getMessage();
+            $_SESSION['error_msg'] = "Er ging iets mis bij het opslaan: " . $e->getMessage();
         }
     }
+    // Als we hier komen was er een error, herlaad de pagina om POST data te wissen
+    header("Location: mijn_verlof.php");
+    exit;
 }
 
-// --- FORMULIER VERWERKEN (Aanvraag annuleren - alleen als deze nog 'pending' is) ---
+// --- FORMULIER VERWERKEN (Aanvraag annuleren) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'cancel_request') {
     $request_id = $_POST['request_id'];
-    // We checken expliciet of deze van de huidige gebruiker is én nog pending is
     $stmt = $pdo->prepare("DELETE FROM requests WHERE id = ? AND user_id = ? AND status = 'pending'");
     $stmt->execute([$request_id, $user_id]);
-    $success_msg = "De aanvraag is geannuleerd.";
+    
+    $_SESSION['success_msg'] = "De aanvraag is geannuleerd.";
+    header("Location: mijn_verlof.php");
+    exit;
 }
 
 // Haal alle aanvragen van deze specifieke gebruiker op
@@ -66,7 +86,7 @@ $my_requests = $stmtRequests->fetchAll();
 <title>Mijn Verlof — MST Logistics</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-/* Exacte CSS uit jouw V3 ontwerp */
+/* CSS ongewijzigd */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{
   --bg:#F5F3EE;--surface:#FFF;--surface2:#EFECE6;--border:#DDD9D0;
@@ -144,6 +164,7 @@ tr:hover td{background:#FAFAF8;}
     <div class="nav-section" style="margin-top:20px;">
       <span class="nav-label">Beheerders Menu</span>
       <a href="medewerkers.php" class="nav-item">Medewerkers (HR)</a>
+      <a href="verlof_beheer.php" class="nav-item">Verlofaanvragen</a>
     </div>
     <?php endif; ?>
 
@@ -169,8 +190,8 @@ tr:hover td{background:#FAFAF8;}
       </div>
     </div>
 
-    <?php if($success_msg): ?><div class="alert alert-success"><?= $success_msg ?></div><?php endif; ?>
-    <?php if($error_msg): ?><div class="alert alert-danger"><?= $error_msg ?></div><?php endif; ?>
+    <?php if($success_msg): ?><div class="alert alert-success"><?= htmlspecialchars($success_msg) ?></div><?php endif; ?>
+    <?php if($error_msg): ?><div class="alert alert-danger"><?= htmlspecialchars($error_msg) ?></div><?php endif; ?>
 
     <div class="card">
       <table>
@@ -285,7 +306,6 @@ tr:hover td{background:#FAFAF8;}
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
-// Zorg dat modal sluit als je buiten het witte vlak klikt
 document.querySelectorAll('.modal-overlay').forEach(o => {
   o.addEventListener('click', e => { if(e.target === o) o.classList.remove('open'); });
 });
