@@ -31,7 +31,7 @@ $employees = $stmtUsers->fetchAll();
 <title>MST Logistics — Medewerkers</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-/* Exact jouw originele CSS voor een strakke weergave */
+/* Basis CSS */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{
   --bg:#F5F3EE;--surface:#FFF;--surface2:#EFECE6;--border:#DDD9D0;
@@ -61,7 +61,7 @@ table{width:100%;border-collapse:collapse;}
 th{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:10px 18px;text-align:left;background:var(--surface2);}
 td{padding:11px 18px;font-size:13.5px;border-top:1px solid var(--border);vertical-align:middle;}
 tr:hover td{background:#FAFAF8;}
-.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 17px;border-radius:var(--radius);border:none;font-family:var(--font);font-size:14px;font-weight:500;cursor:pointer;transition:opacity .15s,transform .1s;}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 17px;border-radius:var(--radius);border:none;font-family:var(--font);font-size:14px;font-weight:500;cursor:pointer;transition:opacity .15s,transform .1s; text-decoration:none;}
 .btn-primary{background:var(--accent);color:#fff;} .btn-primary:hover{opacity:.88;}
 .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500;}
 .badge-manager{background:#E8F8F5;color:#0E6655;border:1px solid #A9DFBF;}
@@ -102,7 +102,7 @@ tr:hover td{background:#FAFAF8;}
         <p>Overzicht van alle actieve accounts uit de database</p>
       </div>
       <div class="page-header-actions">
-        <button class="btn btn-primary">+ Medewerker toevoegen</button>
+        <a href="medewerker_toevoegen.php" class="btn btn-primary">+ Medewerker toevoegen</a>
       </div>
     </div>
 
@@ -152,9 +152,6 @@ tr:hover td{background:#FAFAF8;}
             </td>
           </tr>
           <?php endforeach; ?>
-          <?php if (count($employees) === 0): ?>
-            <tr><td colspan="6" style="text-align:center; padding: 20px; color: var(--text3);">Geen medewerkers gevonden.</td></tr>
-          <?php endif; ?>
         </tbody>
       </table>
     </div>
