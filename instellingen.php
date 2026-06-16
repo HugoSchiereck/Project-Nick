@@ -61,6 +61,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $stmt->execute(['company_name', $company]);
         $stmt->execute(['admin_email', $email]);
         
+        // -- AUDIT LOG --
+        $pdo->exec("INSERT INTO audit_log (user_id, category, action, detail) VALUES ({$_SESSION['user_id']}, 'systeem', 'Instellingen gewijzigd', 'Bedrijfsnaam en/of e-mailadres bijgewerkt')");
+        
         $_SESSION['success_msg'] = "Instellingen succesvol opgeslagen!";
         header("Location: instellingen.php"); exit;
     }
@@ -71,6 +74,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         if (!empty($name)) {
             $stmt = $pdo->prepare("INSERT INTO leave_types (name) VALUES (?)");
             $stmt->execute([$name]);
+            
+            // -- AUDIT LOG --
+            $logDetail = addslashes("Nieuw verloftype: $name");
+            $pdo->exec("INSERT INTO audit_log (user_id, category, action, detail) VALUES ({$_SESSION['user_id']}, 'systeem', 'Verloftype toegevoegd', '$logDetail')");
+            
             $_SESSION['success_msg'] = "Verloftype '{$name}' toegevoegd!";
         }
         header("Location: instellingen.php"); exit;
@@ -79,8 +87,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     // 3. Verloftype verwijderen
     if ($_POST['action'] === 'delete_leave_type') {
         $id = $_POST['leave_type_id'];
+        
+        // -- AUDIT LOG --
+        $ltInfo = $pdo->query("SELECT name FROM leave_types WHERE id = " . (int)$id)->fetch();
+        if ($ltInfo) {
+            $logDetail = addslashes("Verloftype: {$ltInfo['name']}");
+            $pdo->exec("INSERT INTO audit_log (user_id, category, action, detail) VALUES ({$_SESSION['user_id']}, 'systeem', 'Verloftype verwijderd', '$logDetail')");
+        }
+
         $stmt = $pdo->prepare("DELETE FROM leave_types WHERE id = ?");
         $stmt->execute([$id]);
+        
         $_SESSION['success_msg'] = "Verloftype verwijderd.";
         header("Location: instellingen.php"); exit;
     }
@@ -95,20 +112,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         if (empty($id)) {
             $stmt = $pdo->prepare("INSERT INTO email_templates (name, subject, body) VALUES (?, ?, ?)");
             $stmt->execute([$name, $subject, $body]);
+            $logAction = 'Sjabloon toegevoegd';
             $_SESSION['success_msg'] = "Sjabloon toegevoegd!";
         } else {
             $stmt = $pdo->prepare("UPDATE email_templates SET name = ?, subject = ?, body = ? WHERE id = ?");
             $stmt->execute([$name, $subject, $body, $id]);
+            $logAction = 'Sjabloon bewerkt';
             $_SESSION['success_msg'] = "Sjabloon opgeslagen!";
         }
+
+        // -- AUDIT LOG --
+        $logDetail = addslashes("Sjabloon: $name");
+        $pdo->exec("INSERT INTO audit_log (user_id, category, action, detail) VALUES ({$_SESSION['user_id']}, 'systeem', '$logAction', '$logDetail')");
+
         header("Location: instellingen.php"); exit;
     }
 
     // 5. E-mailsjabloon verwijderen
     if ($_POST['action'] === 'delete_template') {
         $id = $_POST['template_id'];
+        
+        // -- AUDIT LOG --
+        $tplInfo = $pdo->query("SELECT name FROM email_templates WHERE id = " . (int)$id)->fetch();
+        if ($tplInfo) {
+            $logDetail = addslashes("Sjabloon: {$tplInfo['name']}");
+            $pdo->exec("INSERT INTO audit_log (user_id, category, action, detail) VALUES ({$_SESSION['user_id']}, 'systeem', 'Sjabloon verwijderd', '$logDetail')");
+        }
+
         $stmt = $pdo->prepare("DELETE FROM email_templates WHERE id = ?");
         $stmt->execute([$id]);
+        
         $_SESSION['success_msg'] = "Sjabloon verwijderd.";
         header("Location: instellingen.php"); exit;
     }
