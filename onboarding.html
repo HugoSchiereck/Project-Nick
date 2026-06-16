@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MST Logistics — Onboarding nieuwe medewerker</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#F5F3EE;--surface:#FFF;--surface2:#EFECE6;--border:#DDD9D0;
+  --accent:#D4351C;--accent-light:#FAEAE7;
+  --green:#1F7A4A;--green-light:#E4F3EC;
+  --text:#1A1A18;--text2:#5A5A54;--text3:#9A9A90;
+  --radius:10px;--font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
+}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;font-size:15px;padding:0;}
+
+.page-wrap{max-width:660px;margin:0 auto;padding:40px 20px 60px;}
+
+.form-header{display:flex;align-items:center;gap:14px;margin-bottom:8px;}
+.form-header img{height:40px;width:auto;object-fit:contain;}
+.logo-fallback{width:38px;height:38px;background:var(--accent);border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:17px;flex-shrink:0;}
+.form-header-text h1{font-size:20px;font-weight:600;letter-spacing:-.4px;}
+.form-header-text p{color:var(--text2);font-size:13px;margin-top:2px;}
+.form-divider{border:none;border-top:1px solid var(--border);margin:20px 0 28px;}
+
+.section-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+.section-gap{margin-bottom:28px;}
+
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:13px;font-weight:500;color:var(--text2);margin-bottom:5px;}
+.field input,.field select,.field textarea{width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font);font-size:14px;background:var(--surface);color:var(--text);outline:none;transition:border-color .15s,box-shadow .15s;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(212,53,28,.1);}
+.field input.error,.field select.error{border-color:#C0392B;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.field .hint{font-size:11px;color:var(--text3);margin-top:4px;}
+.required-star{color:var(--accent);margin-left:2px;}
+
+.privacy-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:20px;font-size:12.5px;color:var(--text2);line-height:1.7;}
+.privacy-box strong{color:var(--text);}
+
+.btn-submit{width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-family:var(--font);font-size:15px;font-weight:600;cursor:pointer;letter-spacing:-.2px;transition:opacity .15s,transform .1s;}
+.btn-submit:hover{opacity:.88;}
+.btn-submit:active{transform:scale(.99);}
+
+.form-error-box{background:#FAEAEA;color:#C0392B;border:1px solid #F5C6C3;border-radius:var(--radius);padding:12px 16px;font-size:13px;margin-bottom:18px;display:none;line-height:1.6;}
+.success-screen{display:none;text-align:center;padding:40px 20px;}
+.success-icon{width:60px;height:60px;background:var(--green-light);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:26px;}
+.success-screen h2{font-size:20px;font-weight:600;margin-bottom:8px;letter-spacing:-.4px;}
+.success-screen p{color:var(--text2);font-size:14px;line-height:1.7;margin-bottom:20px;}
+.code-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;font-family:var(--mono);font-size:13px;word-break:break-all;color:var(--text);line-height:1.6;text-align:left;position:relative;cursor:pointer;transition:background .15s;}
+.code-box:hover{background:var(--surface2);}
+.code-box-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px;}
+.copy-hint{font-size:11px;color:var(--text3);margin-top:6px;text-align:center;}
+.copy-confirm{font-size:12px;color:var(--green);margin-top:6px;text-align:center;display:none;}
+
+.form-footer{margin-top:24px;font-size:11.5px;color:var(--text3);text-align:center;line-height:1.7;}
+</style>
+</head>
+<body>
+
+<div class="page-wrap">
+
+  <div class="form-header">
+    <img src="https://mstlogistics.nl/assets/images/logo/logo.svg" alt="MST Logistics" onerror="this.style.display='none';document.getElementById('logo-fb').style.display='flex'">
+    <div class="logo-fallback" id="logo-fb" style="display:none">M</div>
+    <div class="form-header-text">
+      <h1>Onboarding MST Logistics</h1>
+      <p>Vul onderstaand formulier in om je gegevens door te sturen</p>
+    </div>
+  </div>
+  <hr class="form-divider">
+
+  <div class="form-error-box" id="form-error"></div>
+
+  <form id="onboarding-form" novalidate>
+
+    <div class="section-gap">
+      <div class="section-title">Persoonsgegevens</div>
+      <div class="form-row">
+        <div class="field"><label>Voornaam<span class="required-star">*</span></label><input type="text" id="f-firstname" placeholder="Jan" autocomplete="given-name"></div>
+        <div class="field"><label>Achternaam<span class="required-star">*</span></label><input type="text" id="f-lastname" placeholder="Janssen" autocomplete="family-name"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Geboortedatum<span class="required-star">*</span></label><input type="date" id="f-birthdate" autocomplete="bday"></div>
+        <div class="field"><label>Geboorteplaats<span class="required-star">*</span></label><input type="text" id="f-birthplace" placeholder="Amsterdam"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Telefoon (mobiel)<span class="required-star">*</span></label><input type="tel" id="f-phone" placeholder="06 12 34 56 78" autocomplete="tel"></div>
+        <div class="field"><label>E-mailadres<span class="required-star">*</span></label><input type="email" id="f-email" placeholder="jan@example.nl" autocomplete="email"></div>
+      </div>
+    </div>
+
+    <div class="section-gap">
+      <div class="section-title">Adresgegevens</div>
+      <div class="field"><label>Straat + huisnummer<span class="required-star">*</span></label><input type="text" id="f-street" placeholder="Voorbeeldstraat 12" autocomplete="street-address"></div>
+      <div class="form-row">
+        <div class="field"><label>Postcode<span class="required-star">*</span></label><input type="text" id="f-zip" placeholder="1234 AB" autocomplete="postal-code"></div>
+        <div class="field"><label>Woonplaats<span class="required-star">*</span></label><input type="text" id="f-city" placeholder="Amsterdam" autocomplete="address-level2"></div>
+      </div>
+    </div>
+
+    <div class="section-gap">
+      <div class="section-title">Bankgegevens</div>
+      <div class="field"><label>Bankrekeningnummer (IBAN)<span class="required-star">*</span></label><input type="text" id="f-iban" placeholder="NL91 ABNA 0417 1643 00" autocomplete="off" style="font-family:var(--mono)"></div>
+      <div class="field"><label>Tenaamstelling bankrekening<span class="required-star">*</span></label><input type="text" id="f-iban-name" placeholder="J. Janssen"></div>
+    </div>
+
+    <div class="section-gap">
+      <div class="section-title">Identiteitsgegevens</div>
+      <div class="field"><label>BSN-nummer<span class="required-star">*</span></label><input type="text" id="f-bsn" placeholder="123456789" autocomplete="off" style="font-family:var(--mono)" maxlength="9"><div class="hint">9-cijferig burgerservicenummer</div></div>
+      <div class="form-row">
+        <div class="field"><label>Paspoort- of ID-kaartnummer<span class="required-star">*</span></label><input type="text" id="f-docnr" placeholder="XM1234567" autocomplete="off" style="font-family:var(--mono)"></div>
+        <div class="field"><label>Geldig t/m<span class="required-star">*</span></label><input type="date" id="f-docexpiry"><div class="hint">Vervaldatum identiteitsdocument</div></div>
+      </div>
+    </div>
+
+    <div class="section-gap">
+      <div class="section-title">In geval van nood</div>
+      <div class="form-row">
+        <div class="field"><label>Naam contactpersoon<span class="required-star">*</span></label><input type="text" id="f-ec-name" placeholder="Maria Janssen"></div>
+        <div class="field"><label>Telefoonnummer contactpersoon<span class="required-star">*</span></label><input type="tel" id="f-ec-phone" placeholder="06 98 76 54 32"></div>
+      </div>
+    </div>
+
+    <div class="section-gap">
+      <div class="section-title">Indiensttreding</div>
+      <div class="field"><label>Datum indiensttreding<span class="required-star">*</span></label><input type="date" id="f-startdate"></div>
+    </div>
+
+    <div class="privacy-box">
+      <strong>Privacy:</strong> Je gegevens worden uitsluitend gebruikt voor de administratie van MST Logistics en worden niet gedeeld met derden. Door te verzenden ga je akkoord met de verwerking van je gegevens voor HR-doeleinden.
+    </div>
+
+    <button type="button" class="btn-submit" onclick="submitForm()">Gegevens versturen →</button>
+  </form>
+
+  <div class="success-screen" id="success-screen">
+    <div class="success-icon">✓</div>
+    <h2>Gegevens verstuurd!</h2>
+    <p>Bedankt. Jouw gegevens zijn versleuteld in een code gezet.<br>
+       Kopieer onderstaande code en stuur deze door naar jouw contactpersoon bij MST Logistics.</p>
+    <div class="code-box-label">Jouw code — klik om te kopiëren</div>
+    <div class="code-box" id="result-code" onclick="copyCode()"></div>
+    <div class="copy-confirm" id="copy-confirm">✓ Gekopieerd!</div>
+    <div class="copy-hint">Verstuur deze code via WhatsApp of e-mail naar je contactpersoon.</div>
+  </div>
+
+  <div class="form-footer">MST Logistics · Personeelsportaal · Alle velden gemarkeerd met <span style="color:var(--accent)">*</span> zijn verplicht</div>
+
+</div>
+
+<script>
+function getVal(id){ return document.getElementById(id).value.trim(); }
+
+function validate(){
+  const required = [
+    ['f-firstname','Voornaam'],['f-lastname','Achternaam'],
+    ['f-birthdate','Geboortedatum'],['f-birthplace','Geboorteplaats'],
+    ['f-phone','Telefoonnummer'],['f-email','E-mailadres'],
+    ['f-street','Straat + huisnummer'],['f-zip','Postcode'],['f-city','Woonplaats'],
+    ['f-iban','Bankrekeningnummer'],['f-iban-name','Tenaamstelling bankrekening'],
+    ['f-bsn','BSN-nummer'],['f-docnr','Paspoort/ID-nummer'],['f-docexpiry','Geldig t/m'],
+    ['f-ec-name','Naam noodcontact'],['f-ec-phone','Telefoon noodcontact'],
+    ['f-startdate','Datum indiensttreding']
+  ];
+  let errors = [];
+  required.forEach(([id, label]) => {
+    const el = document.getElementById(id);
+    if (!el.value.trim()) {
+      el.classList.add('error');
+      errors.push(label);
+    } else {
+      el.classList.remove('error');
+    }
+  });
+  
+  const bsn = getVal('f-bsn');
+  if (bsn && !/^\d{9}$/.test(bsn.replace(/\s/g,''))) {
+    document.getElementById('f-bsn').classList.add('error');
+    errors.push('BSN moet 9 cijfers bevatten');
+  }
+  
+  const email = getVal('f-email');
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    document.getElementById('f-email').classList.add('error');
+    errors.push('Voer een geldig e-mailadres in');
+  }
+  return errors;
+}
+
+function submitForm(){
+  const errors = validate();
+  const errBox = document.getElementById('form-error');
+  if (errors.length) {
+    errBox.innerHTML = '<strong>Vul de volgende verplichte velden in:</strong><br>' + errors.join(' · ');
+    errBox.style.display = 'block';
+    errBox.scrollIntoView({behavior:'smooth', block:'center'});
+    return;
+  }
+  errBox.style.display = 'none';
+
+  const data = {
+    _v: 1,
+    firstName:   getVal('f-firstname'),
+    lastName:    getVal('f-lastname'),
+    birthdate:   getVal('f-birthdate'),
+    birthplace:  getVal('f-birthplace'),
+    phone:       getVal('f-phone'),
+    email:       getVal('f-email'),
+    street:      getVal('f-street'),
+    zip:         getVal('f-zip'),
+    city:        getVal('f-city'),
+    iban:        getVal('f-iban').replace(/\s/g,'').toUpperCase(),
+    ibanName:    getVal('f-iban-name'),
+    bsn:         getVal('f-bsn').replace(/\s/g,''),
+    docNr:       getVal('f-docnr'),
+    docExpiry:   getVal('f-docexpiry'),
+    ecName:      getVal('f-ec-name'),
+    ecPhone:     getVal('f-ec-phone'),
+    startDate:   getVal('f-startdate'),
+    submittedAt: new Date().toISOString()
+  };
+
+  const code = 'MST-' + btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+
+  document.getElementById('onboarding-form').style.display = 'none';
+  document.getElementById('success-screen').style.display = 'block';
+  document.getElementById('result-code').textContent = code;
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function copyCode(){
+  const code = document.getElementById('result-code').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    document.getElementById('copy-confirm').style.display = 'block';
+    setTimeout(() => document.getElementById('copy-confirm').style.display='none', 2500);
+  });
+}
+
+document.querySelectorAll('input, select').forEach(el => {
+  el.addEventListener('input', () => el.classList.remove('error'));
+});
+</script>
+</body>
+</html>
