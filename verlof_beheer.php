@@ -19,23 +19,55 @@ if ($currentUser['role'] !== 'admin' && $currentUser['role'] !== 'manager') {
 
 $success_msg = '';
 
-// --- VERWERK BEOORDELING (Goedkeuren / Afwijzen) ---
+// --- VERWERK FORMULIEREN (Goedkeuren / Afwijzen / Verwijderen) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $request_id = $_POST['request_id'];
     $admin_note = trim($_POST['admin_note'] ?? '');
+    $action = $_POST['action'];
     $new_status = '';
+    $logAction = '';
 
-    if ($_POST['action'] === 'approve') {
+    // 1. Goedkeuren of Afwijzen
+    if ($action === 'approve') {
         $new_status = 'approved';
         $success_msg = "Aanvraag is succesvol goedgekeurd!";
-    } elseif ($_POST['action'] === 'reject') {
+        $logAction = 'Verlof goedgekeurd';
+    } elseif ($action === 'reject') {
         $new_status = 'rejected';
         $success_msg = "Aanvraag is afgewezen.";
+        $logAction = 'Verlof geweigerd';
     }
 
     if ($new_status) {
-        $stmt = $pdo->prepare("UPDATE requests SET status = ?, admin_note = ? WHERE id = ?");
-        $stmt->execute([$new_status, $admin_note, $request_id]);
+        // Update de status in de database
+        $stmt = $pdo->prepare("UPDATE requests SET status = ?, admin_note = ?, reviewed_by = ? WHERE id = ?");
+        $stmt->execute([$new_status, $admin_note, $_SESSION['user_id'], $request_id]);
+
+        // -- AUDIT LOG --
+        $reqInfo = $pdo->query("SELECT r.type, u.first_name, u.last_name FROM requests r JOIN users u ON r.user_id = u.id WHERE r.id = " . (int)$request_id)->fetch();
+        if ($reqInfo) {
+            $logDetail = "{$reqInfo['type']} voor {$reqInfo['first_name']} {$reqInfo['last_name']}";
+            $stmtLog = $pdo->prepare("INSERT INTO audit_log (user_id, category, action, detail) VALUES (?, 'verlof', ?, ?)");
+            $stmtLog->execute([$_SESSION['user_id'], $logAction, $logDetail]);
+        }
+        // ---------------
+    }
+
+    // 2. Verwijderen
+    if ($action === 'delete_request') {
+        // -- AUDIT LOG (Eerst info ophalen voordat we hem weggooien) --
+        $reqInfo = $pdo->query("SELECT r.type, u.first_name, u.last_name FROM requests r JOIN users u ON r.user_id = u.id WHERE r.id = " . (int)$request_id)->fetch();
+        if ($reqInfo) {
+            $logDetail = "{$reqInfo['type']} van {$reqInfo['first_name']} {$reqInfo['last_name']} (ID: $request_id)";
+            $stmtLog = $pdo->prepare("INSERT INTO audit_log (user_id, category, action, detail) VALUES (?, 'verlof', 'Aanvraag verwijderd', ?)");
+            $stmtLog->execute([$_SESSION['user_id'], $logDetail]);
+        }
+        // ---------------
+
+        $stmt = $pdo->prepare("DELETE FROM requests WHERE id = ?");
+        $stmt->execute([$request_id]);
+        
+        $success_msg = "Aanvraag succesvol verwijderd.";
     }
 }
 
@@ -162,18 +194,26 @@ tr:hover td{background:#FAFAF8;}
                 <?php endif; ?>
             </td>
             <td>
-                <?php if($req['status'] === 'pending'): ?>
-                    <button class="btn btn-primary btn-sm" onclick="openReview(
-                        '<?= $req['id'] ?>', 
-                        '<?= addslashes(htmlspecialchars($req['first_name'] . ' ' . $req['last_name'])) ?>', 
-                        '<?= htmlspecialchars($req['type']) ?>', 
-                        '<?= date('d-m-Y', strtotime($req['from_date'])) ?>', 
-                        '<?= date('d-m-Y', strtotime($req['to_date'])) ?>', 
-                        '<?= addslashes(htmlspecialchars($req['reason'])) ?>'
-                    )">Beoordelen</button>
-                <?php else: ?>
-                    <span style="font-size:12px;color:var(--text3)">Beoordeeld</span>
-                <?php endif; ?>
+                <div style="display:flex;gap:5px;">
+                    <?php if($req['status'] === 'pending'): ?>
+                        <button class="btn btn-primary btn-sm" onclick="openReview(
+                            '<?= $req['id'] ?>', 
+                            '<?= addslashes(htmlspecialchars($req['first_name'] . ' ' . $req['last_name'])) ?>', 
+                            '<?= htmlspecialchars($req['type']) ?>', 
+                            '<?= date('d-m-Y', strtotime($req['from_date'])) ?>', 
+                            '<?= date('d-m-Y', strtotime($req['to_date'])) ?>', 
+                            '<?= addslashes(htmlspecialchars($req['reason'])) ?>'
+                        )">Beoordelen</button>
+                    <?php else: ?>
+                        <span style="font-size:12px;color:var(--text3);line-height:26px;">Beoordeeld</span>
+                    <?php endif; ?>
+                    
+                    <form method="POST" action="verlof_beheer.php" style="margin:0;" onsubmit="return confirm('Weet je zeker dat je deze aanvraag wilt verwijderen?');">
+                        <input type="hidden" name="action" value="delete_request">
+                        <input type="hidden" name="request_id" value="<?= $req['id'] ?>">
+                        <button type="submit" class="btn btn-danger btn-sm">✕</button>
+                    </form>
+                </div>
             </td>
           </tr>
           <?php endforeach; ?>
