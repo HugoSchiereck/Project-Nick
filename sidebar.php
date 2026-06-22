@@ -2,6 +2,14 @@
 // sidebar.php
 $currentPage = basename($_SERVER['PHP_SELF']);
 ?>
+<style>
+/* Zorg dat de uitlog-knop altijd de juiste styling heeft, op elke pagina */
+.sidebar-bottom { margin-top: auto; padding: 0 10px; }
+.user-chip { display: flex; align-items: center; gap: 9px; padding: 9px; border-radius: 8px; border: 1px solid var(--border); text-decoration: none !important; color: var(--text) !important; transition: background .12s; }
+.user-chip:hover { background: var(--surface2); }
+.avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--accent-light); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: var(--accent); flex-shrink: 0; }
+</style>
+
 <aside class="sidebar">
   <div class="sidebar-logo-wrap">
     <img src="https://mstlogistics.nl/assets/images/logo/logo.svg" alt="MST Logistics">
