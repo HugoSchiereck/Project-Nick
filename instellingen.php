@@ -33,17 +33,22 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS email_templates (
     body TEXT
 ) ENGINE=InnoDB;");
 
-// Voeg wat standaard data toe als de tabellen leeg zijn
+// Voeg standaard data toe als tabellen leeg zijn
 $setupCheck = $pdo->query("SELECT COUNT(*) FROM leave_types")->fetchColumn();
 if ($setupCheck == 0) {
     $pdo->exec("INSERT INTO leave_types (name) VALUES ('Jaarlijks verlof'), ('Vakantie'), ('Zorgverlof'), ('Bijzonder verlof')");
-    $pdo->exec("INSERT INTO settings (key_name, key_value) VALUES ('company_name', 'MST Logistics'), ('admin_email', 'planning@mstlogistics.nl')");
-    $pdo->exec("INSERT INTO email_templates (name, subject, body) VALUES 
-        ('Verlof goedgekeurd', '[{bedrijf}] Verlofaanvraag goedgekeurd', 'Beste {voornaam},\n\nJe verlofaanvraag is goedgekeurd.\nType: {verlof_type}\nPeriode: {verlof_van} t/m {verlof_tot}\n\nMet vriendelijke groet,\n{bedrijf}'),
-        ('Code 95 herinnering', '[{bedrijf}] Code 95 verloopt binnenkort', 'Beste {voornaam},\n\nJe Code 95 verloopt op {c95_vervaldatum}.\nBehaald: {c95_uren}/35 uur.\n\nZorg tijdig voor bijscholing.\n\nMet vriendelijke groet,\n{bedrijf}')");
+    $pdo->exec("INSERT INTO settings (key_name, key_value) VALUES 
+        ('company_name', 'MST Logistics'), 
+        ('admin_email', 'planning@mstlogistics.nl'),
+        ('smtp_host', ''),
+        ('smtp_port', '465'),
+        ('smtp_user', ''),
+        ('smtp_pass', ''),
+        ('smtp_secure', 'ssl')
+    ");
 }
 
-// --- BERICHTEN OPVANGEN (PRG Patroon) ---
+// --- BERICHTEN OPVANGEN ---
 $success_msg = '';
 $error_msg = '';
 if (isset($_SESSION['success_msg'])) { $success_msg = $_SESSION['success_msg']; unset($_SESSION['success_msg']); }
@@ -52,19 +57,23 @@ if (isset($_SESSION['error_msg'])) { $error_msg = $_SESSION['error_msg']; unset(
 // --- FORMULIEREN VERWERKEN ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     
-    // 1. Algemene instellingen opslaan
+    // 1. Instellingen & SMTP opslaan
     if ($_POST['action'] === 'save_settings') {
-        $company = trim($_POST['company_name'] ?? '');
-        $email = trim($_POST['admin_email'] ?? '');
-        
         $stmt = $pdo->prepare("INSERT INTO settings (key_name, key_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE key_value = VALUES(key_value)");
-        $stmt->execute(['company_name', $company]);
-        $stmt->execute(['admin_email', $email]);
         
-        // -- AUDIT LOG --
-        $pdo->exec("INSERT INTO audit_log (user_id, category, action, detail) VALUES ({$_SESSION['user_id']}, 'systeem', 'Instellingen gewijzigd', 'Bedrijfsnaam en/of e-mailadres bijgewerkt')");
+        $fields = ['company_name', 'admin_email', 'smtp_host', 'smtp_port', 'smtp_user', 'smtp_secure'];
+        foreach ($fields as $field) {
+            $stmt->execute([$field, trim($_POST[$field] ?? '')]);
+        }
         
-        $_SESSION['success_msg'] = "Instellingen succesvol opgeslagen!";
+        // Wachtwoord alleen updaten als er iets is ingevuld
+        if (!empty($_POST['smtp_pass'])) {
+            $stmt->execute(['smtp_pass', trim($_POST['smtp_pass'])]);
+        }
+        
+        $pdo->exec("INSERT INTO audit_log (user_id, category, action, detail) VALUES ({$_SESSION['user_id']}, 'systeem', 'Instellingen gewijzigd', 'Bedrijfs- of SMTP-gegevens bijgewerkt')");
+        
+        $_SESSION['success_msg'] = "Instellingen en SMTP succesvol opgeslagen!";
         header("Location: instellingen.php"); exit;
     }
 
@@ -74,11 +83,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         if (!empty($name)) {
             $stmt = $pdo->prepare("INSERT INTO leave_types (name) VALUES (?)");
             $stmt->execute([$name]);
-            
-            // -- AUDIT LOG --
             $logDetail = addslashes("Nieuw verloftype: $name");
             $pdo->exec("INSERT INTO audit_log (user_id, category, action, detail) VALUES ({$_SESSION['user_id']}, 'systeem', 'Verloftype toegevoegd', '$logDetail')");
-            
             $_SESSION['success_msg'] = "Verloftype '{$name}' toegevoegd!";
         }
         header("Location: instellingen.php"); exit;
@@ -87,22 +93,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     // 3. Verloftype verwijderen
     if ($_POST['action'] === 'delete_leave_type') {
         $id = $_POST['leave_type_id'];
-        
-        // -- AUDIT LOG --
         $ltInfo = $pdo->query("SELECT name FROM leave_types WHERE id = " . (int)$id)->fetch();
         if ($ltInfo) {
             $logDetail = addslashes("Verloftype: {$ltInfo['name']}");
             $pdo->exec("INSERT INTO audit_log (user_id, category, action, detail) VALUES ({$_SESSION['user_id']}, 'systeem', 'Verloftype verwijderd', '$logDetail')");
         }
-
         $stmt = $pdo->prepare("DELETE FROM leave_types WHERE id = ?");
         $stmt->execute([$id]);
-        
         $_SESSION['success_msg'] = "Verloftype verwijderd.";
         header("Location: instellingen.php"); exit;
     }
 
-    // 4. E-mailsjabloon opslaan (nieuw of update)
+    // 4. E-mailsjabloon opslaan
     if ($_POST['action'] === 'save_template') {
         $id = $_POST['template_id'] ?? '';
         $name = trim($_POST['name'] ?? '');
@@ -120,29 +122,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $logAction = 'Sjabloon bewerkt';
             $_SESSION['success_msg'] = "Sjabloon opgeslagen!";
         }
-
-        // -- AUDIT LOG --
         $logDetail = addslashes("Sjabloon: $name");
         $pdo->exec("INSERT INTO audit_log (user_id, category, action, detail) VALUES ({$_SESSION['user_id']}, 'systeem', '$logAction', '$logDetail')");
-
         header("Location: instellingen.php"); exit;
     }
 
     // 5. E-mailsjabloon verwijderen
     if ($_POST['action'] === 'delete_template') {
         $id = $_POST['template_id'];
-        
-        // -- AUDIT LOG --
         $tplInfo = $pdo->query("SELECT name FROM email_templates WHERE id = " . (int)$id)->fetch();
         if ($tplInfo) {
             $logDetail = addslashes("Sjabloon: {$tplInfo['name']}");
             $pdo->exec("INSERT INTO audit_log (user_id, category, action, detail) VALUES ({$_SESSION['user_id']}, 'systeem', 'Sjabloon verwijderd', '$logDetail')");
         }
-
         $stmt = $pdo->prepare("DELETE FROM email_templates WHERE id = ?");
         $stmt->execute([$id]);
-        
         $_SESSION['success_msg'] = "Sjabloon verwijderd.";
+        header("Location: instellingen.php"); exit;
+    }
+
+    // 6. E-mail op de achtergrond verzenden (PHPMailer)
+    if ($_POST['action'] === 'send_email') {
+        $recData = json_decode($_POST['recipient'] ?? '', true);
+        $toEmail = $recData['email'] ?? '';
+        $subject = trim($_POST['subject'] ?? '');
+        $body = trim($_POST['body'] ?? '');
+
+        if (empty($toEmail)) {
+            $_SESSION['error_msg'] = "Selecteer een geldige medewerker met een e-mailadres.";
+        } else {
+            require_once 'mailer.php';
+            $result = stuurAutomatischeEmail($toEmail, $subject, $body);
+            
+            if ($result === true) {
+                $_SESSION['success_msg'] = "E-mail succesvol op de achtergrond verzonden naar $toEmail!";
+                $logDetail = addslashes("Aan $toEmail: $subject");
+                $pdo->exec("INSERT INTO audit_log (user_id, category, action, detail) VALUES ({$_SESSION['user_id']}, 'systeem', 'E-mail verzonden', '$logDetail')");
+            } else {
+                $_SESSION['error_msg'] = "Fout bij verzenden: " . htmlspecialchars($result);
+            }
+        }
         header("Location: instellingen.php"); exit;
     }
 }
@@ -150,7 +169,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 // --- DATA OPHALEN ---
 $settingsArr = $pdo->query("SELECT * FROM settings")->fetchAll(PDO::FETCH_KEY_PAIR);
 $company_name = $settingsArr['company_name'] ?? 'MST Logistics';
-$admin_email = $settingsArr['admin_email'] ?? '';
+$admin_email  = $settingsArr['admin_email'] ?? '';
+$smtp_host    = $settingsArr['smtp_host'] ?? '';
+$smtp_port    = $settingsArr['smtp_port'] ?? '465';
+$smtp_user    = $settingsArr['smtp_user'] ?? '';
+$smtp_secure  = $settingsArr['smtp_secure'] ?? 'ssl';
 
 $leave_types = $pdo->query("SELECT * FROM leave_types ORDER BY name ASC")->fetchAll();
 $templates = $pdo->query("SELECT * FROM email_templates ORDER BY id ASC")->fetchAll();
@@ -164,7 +187,6 @@ $employees = $pdo->query("SELECT id, first_name, last_name, email FROM users WHE
 <title>Instellingen — MST Logistics</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-/* CSS Styling */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{
   --bg:#F5F3EE;--surface:#FFF;--surface2:#EFECE6;--border:#DDD9D0;
@@ -215,7 +237,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 
 .alert{padding:12px 16px;border-radius:8px;font-size:13.5px;margin-bottom:20px;}
 .alert-info{background:#EBF3FB;color:var(--blue);}
-.alert-success{background:var(--green-light);color:var(--green);}
+.alert-success{background:var(--green-light);color:var(--green);border:1px solid #B0D9C0;}
+.alert-danger{background:var(--danger-light);color:var(--danger);border:1px solid #F5C6C3;}
 
 /* Email Templates */
 .template-card{border:1px solid var(--border);border-radius:9px;margin-bottom:12px;overflow:hidden;}
@@ -248,26 +271,48 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
     </div>
 
     <?php if($success_msg): ?><div class="alert alert-success"><?= htmlspecialchars($success_msg) ?></div><?php endif; ?>
-    <?php if($error_msg): ?><div class="alert alert-danger" style="background:var(--danger-light);color:var(--danger);"><?= htmlspecialchars($error_msg) ?></div><?php endif; ?>
+    <?php if($error_msg): ?><div class="alert alert-danger"><?= htmlspecialchars($error_msg) ?></div><?php endif; ?>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px">
       
       <div class="card" style="margin:0">
-        <div class="card-header"><h3>E-mailinstellingen & Bedrijf</h3></div>
+        <div class="card-header">
+            <div>
+                <h3>Bedrijf & E-mailserver (SMTP)</h3>
+                <div class="card-header-sub">Koppel je mailserver om direct vanuit het portaal te mailen</div>
+            </div>
+        </div>
         <div class="card-body-pad">
           <form method="POST" action="instellingen.php">
             <input type="hidden" name="action" value="save_settings">
-            <div class="field"><label>Bedrijfsnaam in e-mails</label><input type="text" name="company_name" value="<?= htmlspecialchars($company_name) ?>" required></div>
-            <div class="field"><label>Beheerder e-mailadres (CC optioneel)</label><input type="email" name="admin_email" value="<?= htmlspecialchars($admin_email) ?>" placeholder="planning@mstlogistics.nl"></div>
-            <button type="submit" class="btn btn-primary btn-sm">Opslaan</button>
+            <div class="field"><label>Bedrijfsnaam afzender</label><input type="text" name="company_name" value="<?= htmlspecialchars($company_name) ?>" required></div>
+            <div class="field"><label>Reply-to E-mailadres</label><input type="email" name="admin_email" value="<?= htmlspecialchars($admin_email) ?>" placeholder="planning@mstlogistics.nl"></div>
+            
+            <hr style="border:none; border-top:1px dashed var(--border); margin:20px 0;">
+            
+            <div class="form-row">
+                <div class="field"><label>SMTP Host</label><input type="text" name="smtp_host" value="<?= htmlspecialchars($smtp_host) ?>" placeholder="mail.voorbeeld.nl"></div>
+                <div class="field"><label>Poort</label><input type="text" name="smtp_port" value="<?= htmlspecialchars($smtp_port) ?>" placeholder="465"></div>
+            </div>
+            
+            <div class="field"><label>SMTP Gebruiker / E-mailadres</label><input type="text" name="smtp_user" value="<?= htmlspecialchars($smtp_user) ?>" placeholder="no-reply@mstlogistics.nl"></div>
+            <div class="field"><label>SMTP Wachtwoord</label><input type="password" name="smtp_pass" placeholder="Leeglaten om huidige te behouden"></div>
+            
+            <div class="field">
+                <label>Beveiliging</label>
+                <select name="smtp_secure">
+                    <option value="ssl" <?= $smtp_secure === 'ssl' ? 'selected' : '' ?>>SSL (Port 465)</option>
+                    <option value="tls" <?= $smtp_secure === 'tls' ? 'selected' : '' ?>>STARTTLS (Port 587)</option>
+                </select>
+            </div>
+            
+            <button type="submit" class="btn btn-primary btn-sm">Instellingen Opslaan</button>
           </form>
         </div>
       </div>
 
       <div class="card" style="margin:0">
-        <div class="card-header">
-            <h3>Verloftypes beheren</h3>
-        </div>
+        <div class="card-header"><h3>Verloftypes beheren</h3></div>
         <div class="card-body-pad">
           <form method="POST" action="instellingen.php" style="display:flex;gap:8px;margin-bottom:16px">
              <input type="hidden" name="action" value="add_leave_type">
@@ -293,7 +338,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
       <div class="card-header">
         <div>
             <h3>Standaard e-mailteksten</h3>
-            <div class="card-header-sub">Gebruik variabelen die automatisch worden ingevuld. Klik op een variabele om in te voegen.</div>
+            <div class="card-header-sub">Sjablonen voor snelle communicatie met medewerkers</div>
         </div>
         <button class="btn btn-primary btn-sm" onclick="openTemplateModal()">+ Nieuw sjabloon</button>
       </div>
@@ -339,40 +384,47 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
               <input type="hidden" name="template_id" value="<?= $t['id'] ?>">
           </form>
         <?php endforeach; ?>
-
       </div>
     </div>
 
     <div class="card">
-      <div class="card-header"><h3>Direct mailen via Outlook/Gmail</h3></div>
+      <div class="card-header">
+          <div>
+              <h3>Test & Verzend E-mail</h3>
+              <div class="card-header-sub">Verstuur direct een mail via de ingestelde SMTP-server</div>
+          </div>
+      </div>
       <div class="card-body-pad">
-        <div class="form-row" style="margin-bottom:12px">
-          <div class="field" style="margin:0">
-              <label>Ontvanger (Medewerker)</label>
-              <select id="manual-recipient" onchange="autoFillEmail()">
-                  <option value="">— Selecteer medewerker —</option>
-                  <?php foreach($employees as $emp): ?>
-                      <option value="<?= htmlspecialchars(json_encode(['voornaam' => $emp['first_name'], 'email' => $emp['email']])) ?>">
-                          <?= htmlspecialchars($emp['first_name'] . ' ' . $emp['last_name']) ?>
-                      </option>
-                  <?php endforeach; ?>
-              </select>
-          </div>
-          <div class="field" style="margin:0">
-              <label>Kies een sjabloon</label>
-              <select id="manual-template" onchange="autoFillEmail()">
-                  <option value="">— Vrije tekst (geen sjabloon) —</option>
-                  <?php foreach($templates as $t): ?>
-                      <option value="<?= htmlspecialchars(json_encode(['subject' => $t['subject'], 'body' => $t['body']])) ?>">
-                          <?= htmlspecialchars($t['name']) ?>
-                      </option>
-                  <?php endforeach; ?>
-              </select>
-          </div>
-        </div>
-        <div class="field"><label>Onderwerp</label><input type="text" id="manual-subject" placeholder="Onderwerp..."></div>
-        <div class="field"><label>Bericht</label><textarea id="manual-body" rows="5" placeholder="Typ hier je bericht..." style="font-family:var(--mono)"></textarea></div>
-        <button class="btn btn-email btn-sm" onclick="openMailClient()">✉ Openen in e-mailprogramma</button>
+        <form method="POST" action="instellingen.php" onsubmit="return confirm('Weet je zeker dat je deze e-mail direct wilt verzenden naar de medewerker?');">
+            <input type="hidden" name="action" value="send_email">
+            <div class="form-row" style="margin-bottom:12px">
+              <div class="field" style="margin:0">
+                  <label>Ontvanger (Medewerker)</label>
+                  <select name="recipient" id="manual-recipient" onchange="autoFillEmail()" required>
+                      <option value="">— Selecteer medewerker —</option>
+                      <?php foreach($employees as $emp): ?>
+                          <option value="<?= htmlspecialchars(json_encode(['voornaam' => $emp['first_name'], 'email' => $emp['email']])) ?>">
+                              <?= htmlspecialchars($emp['first_name'] . ' ' . $emp['last_name']) ?> (<?= htmlspecialchars($emp['email'] ?: 'Geen e-mail') ?>)
+                          </option>
+                      <?php endforeach; ?>
+                  </select>
+              </div>
+              <div class="field" style="margin:0">
+                  <label>Kies een sjabloon</label>
+                  <select id="manual-template" onchange="autoFillEmail()">
+                      <option value="">— Vrije tekst (geen sjabloon) —</option>
+                      <?php foreach($templates as $t): ?>
+                          <option value="<?= htmlspecialchars(json_encode(['subject' => $t['subject'], 'body' => $t['body']])) ?>">
+                              <?= htmlspecialchars($t['name']) ?>
+                          </option>
+                      <?php endforeach; ?>
+                  </select>
+              </div>
+            </div>
+            <div class="field"><label>Onderwerp</label><input type="text" name="subject" id="manual-subject" placeholder="Onderwerp..." required></div>
+            <div class="field"><label>Bericht</label><textarea name="body" id="manual-body" rows="5" placeholder="Typ hier je bericht..." style="font-family:var(--mono)" required></textarea></div>
+            <button type="submit" class="btn btn-primary btn-sm">🚀 E-mail direct verzenden</button>
+        </form>
       </div>
     </div>
 
@@ -408,7 +460,6 @@ function copyVar(text) {
     });
 }
 
-// Slimme functie voor de handmatige mail generator
 const companyName = "<?= addslashes($company_name) ?>";
 
 function autoFillEmail() {
@@ -423,30 +474,12 @@ function autoFillEmail() {
 
     if (tplVal) {
         const tpl = JSON.parse(tplVal);
-        let subject = tpl.subject.replace('{bedrijf}', companyName).replace('{voornaam}', voornaam);
-        let body = tpl.body.replace('{bedrijf}', companyName).replace('{voornaam}', voornaam);
+        let subject = tpl.subject.replace(/{bedrijf}/g, companyName).replace(/{voornaam}/g, voornaam);
+        let body = tpl.body.replace(/{bedrijf}/g, companyName).replace(/{voornaam}/g, voornaam);
         
         document.getElementById('manual-subject').value = subject;
         document.getElementById('manual-body').value = body;
     }
-}
-
-function openMailClient() {
-    const recVal = document.getElementById('manual-recipient').value;
-    if (!recVal) {
-        alert("Selecteer eerst een ontvanger.");
-        return;
-    }
-    const rec = JSON.parse(recVal);
-    if (!rec.email) {
-        alert("Deze medewerker heeft geen e-mailadres ingesteld.");
-        return;
-    }
-
-    const subject = encodeURIComponent(document.getElementById('manual-subject').value);
-    const body = encodeURIComponent(document.getElementById('manual-body').value);
-    
-    window.location.href = `mailto:${rec.email}?subject=${subject}&body=${body}`;
 }
 
 document.querySelectorAll('.modal-overlay').forEach(o => {
