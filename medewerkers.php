@@ -239,7 +239,7 @@ if ($currentUser['role'] === 'admin') {
     $employees = $pdo->query("SELECT * FROM users WHERE role != 'admin' ORDER BY role ASC, first_name ASC")->fetchAll();
 }
 
-// Makkelijker: bouw een JSON object per user_id met zijn mutaties voor de pop-ups
+// Haal mutaties op voor JS
 $mutData = [];
 $mutRaw = $pdo->query("SELECT m.*, u.first_name as by_first FROM leave_mutations m LEFT JOIN users u ON m.added_by = u.id ORDER BY m.mutation_date DESC, m.id DESC")->fetchAll();
 foreach ($mutRaw as $m) {
@@ -253,7 +253,6 @@ foreach ($mutRaw as $m) {
     ];
 }
 
-// Bepaal max PNR voor het toevoeg-formulier
 $pnrStmt = $pdo->query("SELECT MAX(CAST(pnr AS UNSIGNED)) FROM users WHERE pnr REGEXP '^[0-9]+$'");
 $max_pnr = $pnrStmt->fetchColumn();
 $next_pnr = $max_pnr ? (int)$max_pnr + 1 : 1001;
@@ -340,7 +339,6 @@ tr:hover td{background:#FAFAF8;}
 .bar.blue{background:var(--blue);}
 </style>
 <script>
-// JSON injectie van mutaties voor JS
 const leaveMutations = <?= json_encode($mutData) ?>;
 </script>
 </head>
@@ -407,7 +405,7 @@ const leaveMutations = <?= json_encode($mutData) ?>;
                 </td>
                 <td style="font-size:12px">
                     <span style="font-weight:600"><?= number_format($sRes, 1, ',', '') ?></span><span style="color:var(--text3)">/<?= number_format($u['snipper_saldo'], 0, ',', '') ?>d</span>
-                    <button class="btn btn-secondary btn-sm" style="padding:2px 6px;margin-left:4px" onclick="openSnipper(<?= $u['id'] ?>, '<?= addslashes($u['first_name'] . ' ' . $u['last_name']) ?>', '<?= $u['pnr'] ?>', <?= $u['snipper_saldo'] ?>, <?= $u['snipper_used'] ?>, <?= $u['atv_saldo'] ?>, <?= $u['atv_used'] ?>)" title="Beheren">✎</button>
+                    <button class="btn btn-secondary btn-sm" style="padding:2px 6px;margin-left:4px" onclick="openSnipper(<?= $u['id'] ?>, '<?= addslashes(htmlspecialchars($u['first_name'] . ' ' . $u['last_name'])) ?>', '<?= htmlspecialchars($u['pnr']) ?>', <?= $u['snipper_saldo'] ?>, <?= $u['snipper_used'] ?>, <?= $u['atv_saldo'] ?>, <?= $u['atv_used'] ?>)" title="Beheren">✎</button>
                 </td>
                 <td style="font-size:12px">
                     <span style="font-weight:600"><?= number_format($aRes, 1, ',', '') ?></span><span style="color:var(--text3)">/<?= number_format($u['atv_saldo'], 0, ',', '') ?>d</span>
@@ -415,11 +413,11 @@ const leaveMutations = <?= json_encode($mutData) ?>;
                 <td>
                     <div style="display:flex;gap:5px;">
                         <?php if($currentUser['role'] === 'admin' && $u['id'] !== $currentUser['id']): ?>
-                            <button class="btn btn-secondary btn-sm" onclick="changeRole(<?= $u['id'] ?>, '<?= $u['role'] ?>')">Rol</button>
+                            <button class="btn btn-secondary btn-sm" onclick="openRoleModal(<?= $u['id'] ?>, '<?= addslashes(htmlspecialchars($u['first_name'] . ' ' . $u['last_name'])) ?>', '<?= $u['role'] ?>')">Rol</button>
                         <?php endif; ?>
                         
                         <?php if($u['id'] !== $currentUser['id']): ?>
-                            <button class="btn btn-secondary btn-sm" onclick="resetPassword(<?= $u['id'] ?>)">Ww.</button>
+                            <button class="btn btn-secondary btn-sm" onclick="openPasswordModal(<?= $u['id'] ?>, '<?= addslashes(htmlspecialchars($u['first_name'] . ' ' . $u['last_name'])) ?>')">Ww.</button>
                         <?php endif; ?>
 
                         <?php if($currentUser['role'] === 'admin' && $u['id'] !== $currentUser['id']): ?>
@@ -443,7 +441,6 @@ const leaveMutations = <?= json_encode($mutData) ?>;
       <h3>Medewerker toevoegen</h3>
       <form method="POST" action="medewerkers.php">
           <input type="hidden" name="action" value="add_employee">
-          
           <div class="form-row">
               <div class="field"><label>Voornaam *</label><input type="text" name="first_name" required placeholder="Jan"></div>
               <div class="field"><label>Achternaam</label><input type="text" name="last_name" placeholder="Janssen"></div>
@@ -473,7 +470,6 @@ const leaveMutations = <?= json_encode($mutData) ?>;
               <div class="field"><label>Snipperdagen (start)</label><input type="number" name="snipper" step="0.5" value="25"></div>
               <div class="field"><label>ATV-dagen (start)</label><input type="number" name="atv" step="0.5" value="10"></div>
           </div>
-          
           <div class="modal-actions">
             <button type="button" class="btn btn-secondary" onclick="closeModal('modal-add-emp')">Annuleren</button>
             <button type="submit" class="btn btn-primary">Toevoegen</button>
@@ -485,13 +481,10 @@ const leaveMutations = <?= json_encode($mutData) ?>;
   <div class="modal-overlay" id="modal-snipper">
     <div class="modal" style="max-width:620px">
       <h3 id="snipper-title">Verlof & ATV beheren</h3>
-      
       <div id="snipper-stats" style="margin-bottom:16px;"></div>
-
       <form method="POST" action="medewerkers.php" style="background:#FAFAF8;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px;">
           <input type="hidden" name="action" value="mutate_leave">
           <input type="hidden" name="user_id" id="mut-user-id">
-          
           <div class="form-row">
             <div class="field">
                 <label>Type</label>
@@ -518,7 +511,6 @@ const leaveMutations = <?= json_encode($mutData) ?>;
               <button type="submit" class="btn btn-primary btn-sm">Verwerken</button>
           </div>
       </form>
-
       <div class="card" style="margin:0">
         <div class="card-header"><h3>Mutatiehistorie</h3></div>
         <div style="max-height:180px;overflow-y:auto">
@@ -528,7 +520,6 @@ const leaveMutations = <?= json_encode($mutData) ?>;
           </table>
         </div>
       </div>
-
     </div>
   </div>
 
@@ -536,10 +527,8 @@ const leaveMutations = <?= json_encode($mutData) ?>;
     <div class="modal" style="max-width:620px">
       <h3>Bulk toewijzen — Snipperdagen & ATV</h3>
       <div class="alert alert-info" style="margin-bottom:14px">Selecteer medewerkers en stel het saldo in. Bestaand saldo wordt <strong>overschreven</strong> tenzij je "Bijschrijven" kiest.</div>
-      
       <form method="POST" action="medewerkers.php">
           <input type="hidden" name="action" value="bulk_leave">
-          
           <div class="form-row">
             <div class="field">
                 <label>Actie</label>
@@ -555,7 +544,6 @@ const leaveMutations = <?= json_encode($mutData) ?>;
             <div class="field"><label>Snipperdagen (+/-)</label><input type="number" name="snipper_days" step="0.5" placeholder="25"></div>
             <div class="field"><label>ATV-dagen (+/-)</label><input type="number" name="atv_days" step="0.5" placeholder="10"></div>
           </div>
-
           <div class="field">
             <label>Medewerkers selecteren</label>
             <div class="emp-picker-controls">
@@ -574,7 +562,6 @@ const leaveMutations = <?= json_encode($mutData) ?>;
                 <?php endforeach; ?>
             </div>
           </div>
-
           <div class="modal-actions">
             <button type="button" class="btn btn-secondary" onclick="closeModal('modal-bulk')">Annuleren</button>
             <button type="submit" class="btn btn-primary">Verwerken</button>
@@ -583,49 +570,99 @@ const leaveMutations = <?= json_encode($mutData) ?>;
     </div>
   </div>
 
-  <form id="form-reset-pass" method="POST" action="medewerkers.php" style="display:none;">
-      <input type="hidden" name="action" value="reset_password">
-      <input type="hidden" name="user_id" id="rp_uid">
-      <input type="hidden" name="new_password" id="rp_pass">
-  </form>
-  <form id="form-change-role" method="POST" action="medewerkers.php" style="display:none;">
-      <input type="hidden" name="action" value="change_role">
-      <input type="hidden" name="user_id" id="cr_uid">
-      <input type="hidden" name="new_role" id="cr_role">
-  </form>
+  <div class="modal-overlay" id="modal-role">
+    <div class="modal" style="max-width:400px">
+      <h3>Toegangsrol wijzigen</h3>
+      <p style="font-size:13.5px;color:var(--text2);margin-bottom:16px;">Wijzig de rechten in het systeem voor <strong id="role-user-name"></strong>.</p>
+      <form method="POST" action="medewerkers.php">
+          <input type="hidden" name="action" value="change_role">
+          <input type="hidden" name="user_id" id="role-uid">
+          
+          <div class="field">
+              <label>Nieuwe rol</label>
+              <select name="new_role" id="role-select">
+                  <option value="employee">Medewerker (Alleen persoonlijk portaal)</option>
+                  <option value="manager">Manager (Toegang tot beheer, zonder instellingen)</option>
+                  <option value="admin">Hoofdbeheerder (Volledige systeemtoegang)</option>
+              </select>
+          </div>
+          
+          <div class="alert alert-danger" id="admin-warning" style="display:none; font-size:12px; padding:10px; margin-top:10px;">
+              ⚠️ <strong>Let op:</strong> Een hoofdbeheerder heeft toegang tot alle medewerkersgegevens, saldi en de instellingen van het portaal.
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('modal-role')">Annuleren</button>
+            <button type="submit" class="btn btn-primary">Rol opslaan</button>
+          </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-password">
+    <div class="modal" style="max-width:400px">
+      <h3>Wachtwoord resetten</h3>
+      <p style="font-size:13.5px;color:var(--text2);margin-bottom:16px;">Stel een nieuw wachtwoord in voor <strong id="pw-user-name"></strong>.</p>
+      <form method="POST" action="medewerkers.php" onsubmit="return validatePassword()">
+          <input type="hidden" name="action" value="reset_password">
+          <input type="hidden" name="user_id" id="pw-uid">
+          
+          <div class="field">
+              <label>Nieuw wachtwoord</label>
+              <input type="text" name="new_password" id="pw-input" required minlength="6" placeholder="Bijv. Welkom2025!">
+              <div style="font-size:11px;color:var(--text3);margin-top:4px;">Minimaal 6 tekens vereist.</div>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('modal-password')">Annuleren</button>
+            <button type="submit" class="btn btn-primary">Wachtwoord opslaan</button>
+          </div>
+      </form>
+    </div>
+  </div>
 
 <script>
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
-function openBulkVerlofModal() {
-    openModal('modal-bulk');
+function openBulkVerlofModal() { openModal('modal-bulk'); }
+
+// Nieuwe functie voor de Wachtwoord Modal
+function openPasswordModal(uid, name) {
+    document.getElementById('pw-uid').value = uid;
+    document.getElementById('pw-user-name').textContent = name;
+    document.getElementById('pw-input').value = '';
+    openModal('modal-password');
 }
 
-function resetPassword(uid) {
-    const np = prompt("Voer het nieuwe wachtwoord in voor deze medewerker:");
-    if (np && np.trim().length >= 6) {
-        document.getElementById('rp_uid').value = uid;
-        document.getElementById('rp_pass').value = np;
-        document.getElementById('form-reset-pass').submit();
-    } else if (np) {
+function validatePassword() {
+    if(document.getElementById('pw-input').value.length < 6) {
         alert("Wachtwoord moet minimaal 6 tekens zijn.");
+        return false;
+    }
+    return true;
+}
+
+// Nieuwe functie voor de Rol Modal
+function openRoleModal(uid, name, currentRole) {
+    document.getElementById('role-uid').value = uid;
+    document.getElementById('role-user-name').textContent = name;
+    document.getElementById('role-select').value = currentRole;
+    checkRoleWarning();
+    openModal('modal-role');
+}
+
+document.getElementById('role-select').addEventListener('change', checkRoleWarning);
+
+function checkRoleWarning() {
+    if(document.getElementById('role-select').value === 'admin') {
+        document.getElementById('admin-warning').style.display = 'block';
+    } else {
+        document.getElementById('admin-warning').style.display = 'none';
     }
 }
 
-function changeRole(uid, currentRole) {
-    const roles = "Kies: employee / manager / admin";
-    const nr = prompt(`Huidige rol: ${currentRole}\nNieuwe rol invoeren:\n(${roles})`, currentRole);
-    if (nr && ['employee', 'manager', 'admin'].includes(nr.toLowerCase())) {
-        if (nr.toLowerCase() === 'admin' && !confirm("Weet je ZEKER dat je deze persoon volledige hoofdbeheerder-rechten wilt geven?")) return;
-        document.getElementById('cr_uid').value = uid;
-        document.getElementById('cr_role').value = nr.toLowerCase();
-        document.getElementById('form-change-role').submit();
-    } else if (nr) {
-        alert("Ongeldige rol ingevoerd.");
-    }
-}
-
+// Functie voor Verlof / Snipper
 function openSnipper(uid, name, pnr, sSaldo, sUsed, aSaldo, aUsed) {
     document.getElementById('mut-user-id').value = uid;
     document.getElementById('snipper-title').textContent = `Verlof & ATV — ${name} (Pnr: ${pnr || '—'})`;
