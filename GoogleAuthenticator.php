@@ -1,16 +1,16 @@
 <?php
 // GoogleAuthenticator.php
-// Native PHP class voor Google/Microsoft Authenticator (dependency-free)
+// Gecorrigeerde native PHP class voor Google/Microsoft Authenticator
 
 class GoogleAuthenticator {
     protected $_codeLength = 6;
 
     public function createSecret($secretLength = 16) {
         $validChars = array(
-            'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', //  7
-            'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', // 15
-            'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', // 23
-            'Y', 'Z', '2', '3', '4', '5', '6', '7'  // 31
+            'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
+            'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+            'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
+            'Y', 'Z', '2', '3', '4', '5', '6', '7'
         );
         $secret = '';
         for ($i = 0; $i < $secretLength; $i++) {
@@ -43,7 +43,7 @@ class GoogleAuthenticator {
         return 'otpauth://totp/'.rawurlencode($title).':'.rawurlencode($user).'?secret='.rawurlencode($secret).'&issuer='.rawurlencode($title);
     }
 
-    public function verifyCode($secret, $code, $discrepancy = 1, $currentTimeSlice = null) {
+    public function verifyCode($secret, $code, $discrepancy = 2, $currentTimeSlice = null) {
         if ($currentTimeSlice === null) {
             $currentTimeSlice = floor(time() / 30);
         }
@@ -62,26 +62,24 @@ class GoogleAuthenticator {
         if (empty($secret)) return '';
         $base32chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
         $base32charsFlipped = array_flip(str_split($base32chars));
-        $paddingCharCount = substr_count($secret, '=');
-        $allowedPaddingCounts = array(6, 4, 3, 1, 0);
-        if (!in_array($paddingCharCount, $allowedPaddingCounts)) return false;
-        for ($i = 0; $i < 4; $i++) {
-            if ($paddingCharCount == $allowedPaddingCounts[$i] && substr($secret, -($allowedPaddingCounts[$i])) != str_repeat('=', $allowedPaddingCounts[$i])) return false;
-        }
+        
+        $secret = strtoupper($secret);
         $secret = str_replace('=', '', $secret);
-        $secret = str_split($secret);
+        $secretSplit = str_split($secret);
+        
         $binaryString = "";
-        for ($i = 0; $i < count($secret); $i = $i + 8) {
-            $x = "";
-            if (!in_array($secret[$i], str_split($base32chars))) return false;
-            for ($j = 0; $j < 8; $j++) {
-                $x .= str_pad(base_convert(@$base32charsFlipped[$secret[$i + $j]], 10, 2), 5, '0', STR_PAD_LEFT);
-            }
-            $threeBits = str_split($x, 8);
-            for ($z = 0; $j < count($threeBits); $z++) {
-                $binaryString .= (($y = chr(base_convert($threeBits[$z], 2, 10))) || ord($y) == 0) ? $y : "";
+        foreach ($secretSplit as $char) {
+            if (!isset($base32charsFlipped[$char])) return false;
+            $binaryString .= str_pad(base_convert($base32charsFlipped[$char], 10, 2), 5, '0', STR_PAD_LEFT);
+        }
+        
+        $bytes = str_split($binaryString, 8);
+        $out = "";
+        foreach ($bytes as $byte) {
+            if (strlen($byte) == 8) {
+                $out .= chr(base_convert($byte, 2, 10));
             }
         }
-        return $binaryString;
+        return $out;
     }
 }
