@@ -34,6 +34,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
     <span class="nav-label">Systeem</span>
     <a href="onboarding.php" class="nav-item <?= $currentPage == 'onboarding.php' ? 'active' : '' ?>">Onboarding</a>
     <a href="instellingen.php" class="nav-item <?= $currentPage == 'instellingen.php' ? 'active' : '' ?>">Instellingen</a>
+    <a href="2fa_instellen.php" class="nav-section <?= $currentPage == '2fa_instellen.php' ? 'active' : '' ?>">Beveiliging (2FA)</a>
     <a href="auditlog.php" class="nav-item <?= $currentPage == 'auditlog.php' ? 'active' : '' ?>">Wijzigingslog</a>
   </div>
   <?php endif; ?>
