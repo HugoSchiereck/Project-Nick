@@ -17,11 +17,17 @@ if ($currentUser['role'] !== 'admin' && $currentUser['role'] !== 'manager') {
     die("Je hebt geen toegang tot deze pagina.");
 }
 
-// --- AUTO-SETUP VERLOF TABELLEN & KOLOMMEN ---
+// --- AUTO-SETUP TABELLEN & KOLOMMEN ---
 try { $pdo->exec("ALTER TABLE users ADD COLUMN snipper_saldo DECIMAL(5,2) DEFAULT 25.00"); } catch (PDOException $e) {}
 try { $pdo->exec("ALTER TABLE users ADD COLUMN snipper_used DECIMAL(5,2) DEFAULT 0.00"); } catch (PDOException $e) {}
 try { $pdo->exec("ALTER TABLE users ADD COLUMN atv_saldo DECIMAL(5,2) DEFAULT 10.00"); } catch (PDOException $e) {}
 try { $pdo->exec("ALTER TABLE users ADD COLUMN atv_used DECIMAL(5,2) DEFAULT 0.00"); } catch (PDOException $e) {}
+
+// Nieuwe persoonsgegevens kolommen voor onboarding
+try { $pdo->exec("ALTER TABLE users ADD COLUMN phone VARCHAR(50)"); } catch (PDOException $e) {}
+try { $pdo->exec("ALTER TABLE users ADD COLUMN dob DATE"); } catch (PDOException $e) {}
+try { $pdo->exec("ALTER TABLE users ADD COLUMN bsn VARCHAR(50)"); } catch (PDOException $e) {}
+try { $pdo->exec("ALTER TABLE users ADD COLUMN iban VARCHAR(50)"); } catch (PDOException $e) {}
 
 $pdo->exec("CREATE TABLE IF NOT EXISTS leave_mutations (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -36,6 +42,19 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS leave_mutations (
     FOREIGN KEY (added_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;");
 
+$pdo->exec("CREATE TABLE IF NOT EXISTS onboarding_requests (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
+    email VARCHAR(255),
+    phone VARCHAR(50),
+    dob DATE,
+    bsn VARCHAR(50),
+    iban VARCHAR(50),
+    status ENUM('pending', 'accepted', 'rejected') DEFAULT 'pending',
+    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;");
+
 // --- BERICHTEN OPVANGEN ---
 $success_msg = '';
 $error_msg = '';
@@ -45,7 +64,7 @@ if (isset($_SESSION['error_msg'])) { $error_msg = $_SESSION['error_msg']; unset(
 // --- FORMULIEREN VERWERKEN ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     
-    // 1. Medewerker Toevoegen
+    // 1. Medewerker Toevoegen (en eventueel onboarding accepteren)
     if ($_POST['action'] === 'add_employee') {
         $first = trim($_POST['first_name'] ?? '');
         $last = trim($_POST['last_name'] ?? '');
@@ -57,6 +76,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $snipper = (float)($_POST['snipper'] ?? 25);
         $atv = (float)($_POST['atv'] ?? 10);
         $pnrInput = trim($_POST['pnr'] ?? '');
+        
+        // Extra Onboarding Velden
+        $phone = trim($_POST['phone'] ?? '');
+        $dob = !empty($_POST['dob']) ? $_POST['dob'] : null;
+        $bsn = trim($_POST['bsn'] ?? '');
+        $iban = trim($_POST['iban'] ?? '');
+        $onboarding_id = $_POST['onboarding_id'] ?? '';
 
         if (empty($first) || empty($username) || empty($password)) {
             $_SESSION['error_msg'] = "Vul alle verplichte velden in.";
@@ -73,8 +99,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 }
                 
                 $hash = password_hash($password, PASSWORD_DEFAULT);
-                $stmt = $pdo->prepare("INSERT INTO users (pnr, first_name, last_name, username, email, password_hash, role, function_title, snipper_saldo, atv_saldo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $stmt->execute([$pnrInput, $first, $last, $username, $email, $hash, $role, $func, $snipper, $atv]);
+                $stmt = $pdo->prepare("INSERT INTO users (pnr, first_name, last_name, username, email, password_hash, role, function_title, snipper_saldo, atv_saldo, phone, dob, bsn, iban) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$pnrInput, $first, $last, $username, $email, $hash, $role, $func, $snipper, $atv, $phone, $dob, $bsn, $iban]);
+
+                // Update Onboarding Request indien van toepassing
+                if (!empty($onboarding_id)) {
+                    $pdo->prepare("UPDATE onboarding_requests SET status = 'accepted' WHERE id = ?")->execute([$onboarding_id]);
+                }
 
                 // -- AUDIT LOG --
                 $logDetail = "$first $last ($role, pnr $pnrInput)";
@@ -86,7 +117,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         header("Location: medewerkers.php"); exit;
     }
 
-    // 2. Medewerker Verwijderen
+    // 2. Onboarding Weigeren
+    if ($_POST['action'] === 'reject_onboarding') {
+        $ob_id = $_POST['onboarding_id'];
+        $pdo->prepare("UPDATE onboarding_requests SET status = 'rejected' WHERE id = ?")->execute([$ob_id]);
+        
+        $pdo->exec("INSERT INTO audit_log (user_id, category, action, detail) VALUES ({$_SESSION['user_id']}, 'gebruiker', 'Onboarding afgewezen', 'Aanmelding ID: $ob_id')");
+        
+        $_SESSION['success_msg'] = "Aanmelding is afgewezen en verwijderd uit de lijst.";
+        header("Location: medewerkers.php"); exit;
+    }
+
+    // 3. Medewerker Verwijderen
     if ($_POST['action'] === 'delete_employee') {
         $uid = $_POST['user_id'];
         $uInfo = $pdo->query("SELECT first_name, last_name FROM users WHERE id = " . (int)$uid)->fetch();
@@ -103,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         header("Location: medewerkers.php"); exit;
     }
 
-    // 3. Wachtwoord Resetten
+    // 4. Wachtwoord Resetten
     if ($_POST['action'] === 'reset_password') {
         $uid = $_POST['user_id'];
         $new_pass = $_POST['new_password'];
@@ -120,7 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         header("Location: medewerkers.php"); exit;
     }
 
-    // 4. Rol Wijzigen
+    // 5. Rol Wijzigen
     if ($_POST['action'] === 'change_role') {
         $uid = $_POST['user_id'];
         $new_role = $_POST['new_role'];
@@ -136,11 +178,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         header("Location: medewerkers.php"); exit;
     }
 
-    // 5. Individuele Snipperkaart Mutatie
+    // 6. Individuele Snipperkaart Mutatie
     if ($_POST['action'] === 'mutate_leave') {
         $uid = $_POST['user_id'];
-        $type = $_POST['type']; // 'snipper' of 'atv'
-        $mut_action = $_POST['mut_action']; // 'afschrijven', 'bijschrijven', 'saldo'
+        $type = $_POST['type'];
+        $mut_action = $_POST['mut_action'];
         $days = (float)$_POST['days'];
         $desc = trim($_POST['description'] ?? '');
         $date = date('Y-m-d');
@@ -157,20 +199,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $newSaldo = $days;
                 $newUsed = 0;
             } elseif ($mut_action === 'bijschrijven') {
-                $newUsed = max(0, $newUsed - $days); // Brengt het 'verbruik' omlaag
+                $newUsed = max(0, $newUsed - $days);
             } elseif ($mut_action === 'afschrijven') {
-                $newUsed = min($newSaldo, $newUsed + $days); // Verhoogt het verbruik
+                $newUsed = min($newSaldo, $newUsed + $days);
             }
 
-            // Update user
             $stmtU = $pdo->prepare("UPDATE users SET $saldoCol = ?, $usedCol = ? WHERE id = ?");
             $stmtU->execute([$newSaldo, $newUsed, $uid]);
 
-            // Save mutation history
             $stmtM = $pdo->prepare("INSERT INTO leave_mutations (user_id, type, action, days, description, mutation_date, added_by) VALUES (?, ?, ?, ?, ?, ?, ?)");
             $stmtM->execute([$uid, $type, $mut_action, $days, $desc, $date, $_SESSION['user_id']]);
 
-            // -- AUDIT LOG --
             $logDetail = "{$uInfo['first_name']} {$uInfo['last_name']}: $mut_action {$days}d $type — " . ($desc ?: 'Geen omschrijving');
             $pdo->exec("INSERT INTO audit_log (user_id, category, action, detail) VALUES ({$_SESSION['user_id']}, 'verlof', 'Verlof/ATV mutatie', '$logDetail')");
 
@@ -179,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         header("Location: medewerkers.php"); exit;
     }
 
-    // 6. Bulk Verlof Toewijzen
+    // 7. Bulk Verlof Toewijzen
     if ($_POST['action'] === 'bulk_leave') {
         $participants = $_POST['participants'] ?? [];
         $mut_action = $_POST['bulk_action'];
@@ -195,7 +234,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             foreach ($participants as $uid) {
                 $uInfo = $pdo->query("SELECT * FROM users WHERE id = " . (int)$uid)->fetch();
                 
-                // Snipper
                 if ($snipperDays > 0) {
                     $sSaldo = (float)$uInfo['snipper_saldo']; $sUsed = (float)$uInfo['snipper_used'];
                     if ($mut_action === 'saldo') { $sSaldo = $snipperDays; $sUsed = 0; }
@@ -207,7 +245,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         ->execute([$uid, $mut_action, $snipperDays, $desc, $date, $_SESSION['user_id']]);
                 }
 
-                // ATV
                 if ($atvDays > 0) {
                     $aSaldo = (float)$uInfo['atv_saldo']; $aUsed = (float)$uInfo['atv_used'];
                     if ($mut_action === 'saldo') { $aSaldo = $atvDays; $aUsed = 0; }
@@ -221,7 +258,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             }
             $pdo->commit();
 
-            // -- AUDIT LOG --
             $logDetail = "$mut_action: " . ($snipperDays > 0 ? "{$snipperDays}d snipper " : "") . ($atvDays > 0 ? "{$atvDays}d ATV " : "") . "voor " . count($participants) . " medewerker(s) — $desc";
             $pdo->exec("INSERT INTO audit_log (user_id, category, action, detail) VALUES ({$_SESSION['user_id']}, 'verlof', 'Bulk verlof/ATV', '$logDetail')");
 
@@ -232,14 +268,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 }
 
 // --- DATA OPHALEN ---
-// Voor de tabel:
+$pendingOnboardings = $pdo->query("SELECT * FROM onboarding_requests WHERE status = 'pending' ORDER BY submitted_at ASC")->fetchAll();
+
 if ($currentUser['role'] === 'admin') {
     $employees = $pdo->query("SELECT * FROM users ORDER BY role ASC, first_name ASC")->fetchAll();
 } else {
     $employees = $pdo->query("SELECT * FROM users WHERE role != 'admin' ORDER BY role ASC, first_name ASC")->fetchAll();
 }
 
-// Haal mutaties op voor JS
 $mutData = [];
 $mutRaw = $pdo->query("SELECT m.*, u.first_name as by_first FROM leave_mutations m LEFT JOIN users u ON m.added_by = u.id ORDER BY m.mutation_date DESC, m.id DESC")->fetchAll();
 foreach ($mutRaw as $m) {
@@ -273,7 +309,7 @@ $next_pnr = $max_pnr ? (int)$max_pnr + 1 : 1001;
   --text:#1A1A18;--text2:#5A5A54;--text3:#9A9A90;
   --danger:#C0392B;--danger-light:#FAEAEA;
   --green:#1F7A4A;--green-light:#E4F3EC;
-  --blue:#1A5EA8;
+  --blue:#1A5EA8;--blue-light:#EBF3FB;
   --radius:10px;--font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
 }
 body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;font-size:15px;}
@@ -306,6 +342,7 @@ tr:hover td{background:#FAFAF8;}
 .btn-primary{background:var(--accent);color:#fff;} .btn-primary:hover{opacity:.88;}
 .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border);} .btn-secondary:hover{background:var(--border);}
 .btn-danger{background:var(--danger-light);color:var(--danger);border:1px solid #F5C6C3;} .btn-danger:hover{background:#f5c6c3;}
+.btn-success{background:var(--green-light);color:var(--green);border:1px solid #B0D9C0;} .btn-success:hover{background:#d0ead9;}
 .btn-sm{padding:5px 11px;font-size:12px;}
 .badge-manager{background:#E8F8F5;color:#0E6655;border:1px solid #A9DFBF;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;}
 .tag{display:inline-block;padding:2px 8px;border-radius:5px;font-size:10px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);}
@@ -354,14 +391,54 @@ const leaveMutations = <?= json_encode($mutData) ?>;
       </div>
       <div class="page-header-actions">
         <button class="btn btn-secondary btn-sm" onclick="openBulkVerlofModal()">⚡ Bulk verlof/ATV</button>
-        <button class="btn btn-primary btn-sm" onclick="openModal('modal-add-emp')">+ Toevoegen</button>
+        <button class="btn btn-primary btn-sm" onclick="openAddModal()">+ Toevoegen</button>
       </div>
     </div>
 
     <?php if($success_msg): ?><div class="alert alert-success"><?= $success_msg ?></div><?php endif; ?>
     <?php if($error_msg): ?><div class="alert alert-danger"><?= $error_msg ?></div><?php endif; ?>
 
+    <?php if(count($pendingOnboardings) > 0): ?>
+    <div class="card" style="border-color: #BDD6EF;">
+      <div class="card-header" style="background: var(--blue-light); border-bottom-color: #BDD6EF;">
+        <h3 style="color: var(--blue);">🔔 Nieuwe aanmeldingen (Onboarding)</h3>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Datum</th>
+            <th>Naam</th>
+            <th>E-mail</th>
+            <th>Telefoon</th>
+            <th style="width:160px">Actie</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach($pendingOnboardings as $ob): ?>
+          <tr>
+            <td style="font-size:12px; color:var(--text3)"><?= date('d-m-Y H:i', strtotime($ob['submitted_at'])) ?></td>
+            <td style="font-weight:600;"><?= htmlspecialchars($ob['first_name'] . ' ' . $ob['last_name']) ?></td>
+            <td style="font-size:12px;"><?= htmlspecialchars($ob['email']) ?></td>
+            <td style="font-size:12px;"><?= htmlspecialchars($ob['phone'] ?: '—') ?></td>
+            <td>
+              <div style="display:flex; gap:6px;">
+                <button class="btn btn-success btn-sm" onclick='openAcceptModal(<?= json_encode($ob) ?>)'>✓ Accepteren</button>
+                <form method="POST" style="margin:0" onsubmit="return confirm('Aanmelding weigeren en verwijderen?');">
+                    <input type="hidden" name="action" value="reject_onboarding">
+                    <input type="hidden" name="onboarding_id" value="<?= $ob['id'] ?>">
+                    <button type="submit" class="btn btn-danger btn-sm">✕</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <?php endif; ?>
+
     <div class="card">
+      <div class="card-header"><h3>Actieve Medewerkers</h3></div>
       <table>
         <thead>
           <tr>
@@ -438,21 +515,33 @@ const leaveMutations = <?= json_encode($mutData) ?>;
 
   <div class="modal-overlay" id="modal-add-emp">
     <div class="modal">
-      <h3>Medewerker toevoegen</h3>
-      <form method="POST" action="medewerkers.php">
+      <h3 id="modal-add-title">Medewerker toevoegen</h3>
+      <form method="POST" action="medewerkers.php" id="form-add-emp">
           <input type="hidden" name="action" value="add_employee">
+          <input type="hidden" name="onboarding_id" id="add-onboarding-id" value="">
+          
           <div class="form-row">
-              <div class="field"><label>Voornaam *</label><input type="text" name="first_name" required placeholder="Jan"></div>
-              <div class="field"><label>Achternaam</label><input type="text" name="last_name" placeholder="Janssen"></div>
+              <div class="field"><label>Voornaam *</label><input type="text" name="first_name" id="add-first" required placeholder="Jan"></div>
+              <div class="field"><label>Achternaam</label><input type="text" name="last_name" id="add-last" placeholder="Janssen"></div>
           </div>
           <div class="form-row">
-              <div class="field"><label>Gebruikersnaam *</label><input type="text" name="username" required placeholder="jan.janssen"></div>
-              <div class="field"><label>Wachtwoord *</label><input type="password" name="password" required placeholder="••••••••"></div>
+              <div class="field"><label>Gebruikersnaam *</label><input type="text" name="username" id="add-username" required placeholder="jan.janssen"></div>
+              <div class="field"><label>Wachtwoord *</label><input type="text" name="password" required placeholder="Tijdelijk wachtwoord"></div>
           </div>
-          <div class="form-row">
-              <div class="field"><label>E-mailadres</label><input type="email" name="email" placeholder="jan@mstlogistics.nl"></div>
-              <div class="field"><label>Functie</label><input type="text" name="function" placeholder="Chauffeur"></div>
+          
+          <div style="background:var(--surface2); padding:14px; border-radius:8px; margin-bottom:14px;">
+              <h4 style="font-size:12px; color:var(--text2); margin-bottom:10px; text-transform:uppercase;">Persoonlijke Gegevens</h4>
+              <div class="form-row">
+                  <div class="field"><label>E-mailadres</label><input type="email" name="email" id="add-email" placeholder="jan@mstlogistics.nl"></div>
+                  <div class="field"><label>Telefoonnummer</label><input type="text" name="phone" id="add-phone" placeholder="0612345678"></div>
+              </div>
+              <div class="form-row">
+                  <div class="field"><label>Geboortedatum</label><input type="date" name="dob" id="add-dob"></div>
+                  <div class="field"><label>BSN</label><input type="text" name="bsn" id="add-bsn" placeholder="123456789"></div>
+              </div>
+              <div class="field" style="margin-bottom:0;"><label>IBAN Rekeningnummer</label><input type="text" name="iban" id="add-iban" placeholder="NL99 INGB 0123 4567 89"></div>
           </div>
+
           <div class="form-row">
               <div class="field"><label>Personeelsnummer</label><input type="text" name="pnr" value="<?= $next_pnr ?>" placeholder="auto"></div>
               <div class="field">
@@ -467,12 +556,15 @@ const leaveMutations = <?= json_encode($mutData) ?>;
               </div>
           </div>
           <div class="form-row">
-              <div class="field"><label>Snipperdagen (start)</label><input type="number" name="snipper" step="0.5" value="25"></div>
-              <div class="field"><label>ATV-dagen (start)</label><input type="number" name="atv" step="0.5" value="10"></div>
+              <div class="field"><label>Functie</label><input type="text" name="function" placeholder="Bijv. Chauffeur"></div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+                  <div class="field"><label>Snipper (start)</label><input type="number" name="snipper" step="0.5" value="25"></div>
+                  <div class="field"><label>ATV (start)</label><input type="number" name="atv" step="0.5" value="10"></div>
+              </div>
           </div>
           <div class="modal-actions">
             <button type="button" class="btn btn-secondary" onclick="closeModal('modal-add-emp')">Annuleren</button>
-            <button type="submit" class="btn btn-primary">Toevoegen</button>
+            <button type="submit" class="btn btn-primary" id="btn-add-submit">Toevoegen</button>
           </div>
       </form>
     </div>
@@ -627,7 +719,36 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 
 function openBulkVerlofModal() { openModal('modal-bulk'); }
 
-// Nieuwe functie voor de Wachtwoord Modal
+// --- ONBOARDING & TOEVOEGEN ---
+function openAddModal() {
+    document.getElementById('form-add-emp').reset();
+    document.getElementById('add-onboarding-id').value = '';
+    document.getElementById('modal-add-title').textContent = 'Medewerker toevoegen';
+    document.getElementById('btn-add-submit').textContent = 'Toevoegen';
+    openModal('modal-add-emp');
+}
+
+function openAcceptModal(ob) {
+    // Vul de velden met onboarding data
+    document.getElementById('add-onboarding-id').value = ob.id;
+    document.getElementById('add-first').value = ob.first_name || '';
+    document.getElementById('add-last').value = ob.last_name || '';
+    document.getElementById('add-email').value = ob.email || '';
+    document.getElementById('add-phone').value = ob.phone || '';
+    document.getElementById('add-dob').value = ob.dob || '';
+    document.getElementById('add-bsn').value = ob.bsn || '';
+    document.getElementById('add-iban').value = ob.iban || '';
+    
+    // Genereer standaard gebruikersnaam (voornaam.achternaam)
+    let username = (ob.first_name + '.' + ob.last_name).toLowerCase().replace(/\s+/g, '');
+    document.getElementById('add-username').value = username;
+
+    document.getElementById('modal-add-title').textContent = 'Aanmelding Accepteren';
+    document.getElementById('btn-add-submit').textContent = 'Opslaan & Accepteren';
+    openModal('modal-add-emp');
+}
+
+// --- WACHTWOORD & ROL ---
 function openPasswordModal(uid, name) {
     document.getElementById('pw-uid').value = uid;
     document.getElementById('pw-user-name').textContent = name;
@@ -643,7 +764,6 @@ function validatePassword() {
     return true;
 }
 
-// Nieuwe functie voor de Rol Modal
 function openRoleModal(uid, name, currentRole) {
     document.getElementById('role-uid').value = uid;
     document.getElementById('role-user-name').textContent = name;
@@ -662,7 +782,7 @@ function checkRoleWarning() {
     }
 }
 
-// Functie voor Verlof / Snipper
+// --- VERLOF BEHEREN ---
 function openSnipper(uid, name, pnr, sSaldo, sUsed, aSaldo, aUsed) {
     document.getElementById('mut-user-id').value = uid;
     document.getElementById('snipper-title').textContent = `Verlof & ATV — ${name} (Pnr: ${pnr || '—'})`;
