@@ -38,7 +38,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $_SESSION['error_msg'] = "Selecteer een medewerker en vul de verplichte vervaldatum in.";
     } else {
         try {
-            // INSERT ON DUPLICATE KEY UPDATE zorgt ervoor dat er per medewerker altijd maar 1 TCVT record bestaat.
             $stmt = $pdo->prepare("
                 INSERT INTO tcvt_registrations (user_id, modules, expiry_date, recert_date, hercursus, note) 
                 VALUES (?, ?, ?, ?, ?, ?) 
@@ -56,7 +55,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
 // --- DATA OPHALEN ---
-// We halen alle medewerkers op en koppelen (LEFT JOIN) hun TCVT data als die bestaat
 $query = "
     SELECT u.id, u.first_name, u.last_name, u.function_title, u.email, 
            t.modules, t.expiry_date, t.recert_date, t.hercursus, t.note 
@@ -136,12 +134,11 @@ tr:hover td{background:#FAFAF8;}
 .modal-actions{display:flex;gap:9px;justify-content:flex-end;margin-top:20px;}
 
 .module-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:6px;}
-.module-box{border:2px solid var(--border);border-radius:8px;padding:10px 8px;text-align:center;cursor:pointer;transition:all .15s;user-select:none; background:var(--surface2);}
+.module-box{border:2px solid var(--border);border-radius:8px;padding:12px 8px;text-align:center;cursor:pointer;transition:all .15s;user-select:none; background:var(--surface2);}
 .module-box:hover{border-color:var(--blue);}
-.module-box.checked{border-color:var(--green);background:var(--green-light);}
+.module-box.checked{border-color:var(--green);background:var(--green-light);color:var(--green);}
 .module-box input{display:none;}
-.module-box-label{font-size:18px;font-weight:700;display:block;}
-.module-box-sub{font-size:10px;color:var(--text3);margin-top:2px;}
+.module-box-label{font-size:14px;font-weight:600;display:block;}
 </style>
 </head>
 <body>
@@ -152,7 +149,7 @@ tr:hover td{background:#FAFAF8;}
     <div class="page-header">
       <div class="page-header-text">
         <h1>TCVT Registraties</h1>
-        <p>Technische Commissie Vakbekwaamheid Transport — modules A, B, C, D</p>
+        <p>Technische Commissie Vakbekwaamheid Transport — Modules A t/m D</p>
       </div>
       <div class="page-header-actions">
         <button class="btn btn-primary btn-sm" onclick="openModal('modal-tcvt')">+ TCVT registratie toevoegen</button>
@@ -162,7 +159,7 @@ tr:hover td{background:#FAFAF8;}
     <?php if($success_msg): ?><div class="alert alert-success"><?= htmlspecialchars($success_msg) ?></div><?php endif; ?>
     <?php if($error_msg): ?><div class="alert alert-danger"><?= htmlspecialchars($error_msg) ?></div><?php endif; ?>
 
-    <div class="alert alert-info">Alle 4 modules (A, B, C en D) moeten afgerond zijn voordat een medewerker succesvol kan verlengen.</div>
+    <div class="alert alert-info">Alle 4 modules (A t/m D) moeten afgerond zijn voordat een medewerker succesvol kan verlengen.</div>
 
     <div class="card">
       <table>
@@ -272,10 +269,10 @@ tr:hover td{background:#FAFAF8;}
           <div class="field">
             <label>Modules afgerond</label>
             <div class="module-grid">
-              <label class="module-box" id="mod-box-A" onclick="toggleModule('A')"><input type="checkbox" name="modules[]" value="A" id="mod-A"><span class="module-box-label">A</span><span class="module-box-sub">Techniek</span></label>
-              <label class="module-box" id="mod-box-B" onclick="toggleModule('B')"><input type="checkbox" name="modules[]" value="B" id="mod-B"><span class="module-box-label">B</span><span class="module-box-sub">Rijvaardigheid</span></label>
-              <label class="module-box" id="mod-box-C" onclick="toggleModule('C')"><input type="checkbox" name="modules[]" value="C" id="mod-C"><span class="module-box-label">C</span><span class="module-box-sub">Gevaarlijke stoffen</span></label>
-              <label class="module-box" id="mod-box-D" onclick="toggleModule('D')"><input type="checkbox" name="modules[]" value="D" id="mod-D"><span class="module-box-label">D</span><span class="module-box-sub">Ladingzekering</span></label>
+              <label class="module-box" id="mod-box-A" onclick="toggleModule('A')"><input type="checkbox" name="modules[]" value="A" id="mod-A"><span class="module-box-label">Module A</span></label>
+              <label class="module-box" id="mod-box-B" onclick="toggleModule('B')"><input type="checkbox" name="modules[]" value="B" id="mod-B"><span class="module-box-label">Module B</span></label>
+              <label class="module-box" id="mod-box-C" onclick="toggleModule('C')"><input type="checkbox" name="modules[]" value="C" id="mod-C"><span class="module-box-label">Module C</span></label>
+              <label class="module-box" id="mod-box-D" onclick="toggleModule('D')"><input type="checkbox" name="modules[]" value="D" id="mod-D"><span class="module-box-label">Module D</span></label>
             </div>
           </div>
           
