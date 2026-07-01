@@ -115,7 +115,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 
 <div class="container">
     <div class="logo-wrap">
-        <img src="https://mstlogistics.nl/wp-content/uploads/2024/09/Logo-MST-Logistics.svg" alt="MST Logistics">
+        <img src="https://mstlogistics.nl/assets/images/logo/logo.svg" alt="MST Logistics">
     </div>
 
     <div class="card">
